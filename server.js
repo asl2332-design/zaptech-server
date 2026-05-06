@@ -20,44 +20,44 @@ app.get("/", (req, res) => {
 });
 
 app.post("/send-appointment", async (req, res) => {
-  console.log("DATA RECEIVED:", req.body);
+  console.log("DATA RECEIVED:", JSON.stringify(req.body, null, 2));
 
   try {
     const data = req.body.args || req.body;
 
     const {
-      call_type,
-      priority,
-      customer_name,
-      phone_number,
-      email,
-      service_address,
-      property_type,
-      service_needed,
-      issue_summary,
-      preferred_date,
-      preferred_time_window,
-      confirmation_method,
-      original_appointment_date,
-      requested_new_date,
-      reason_for_change_or_cancel,
-      project_type,
-      project_timeline,
-      plans_or_drawings_available,
-      photos_available,
-      urgent_safety_concern,
-      immediate_danger,
-      additional_notes
+      call_type = "",
+      priority = "Normal",
+      customer_name = "",
+      phone_number = "",
+      email = "",
+      service_address = "",
+      property_type = "",
+      service_needed = "",
+      issue_summary = "",
+      preferred_date = "",
+      preferred_time_window = "",
+      confirmation_method = "",
+      original_appointment_date = "",
+      requested_new_date = "",
+      reason_for_change_or_cancel = "",
+      project_type = "",
+      project_timeline = "",
+      plans_or_drawings_available = "",
+      photos_available = "",
+      urgent_safety_concern = "",
+      immediate_danger = "",
+      additional_notes = ""
     } = data;
 
     const isHighPriority =
-      priority === "High" ||
-      urgent_safety_concern === "Yes" ||
-      immediate_danger === "Yes";
+      priority.toLowerCase() === "high" ||
+      urgent_safety_concern.toLowerCase() === "yes" ||
+      immediate_danger.toLowerCase() === "yes";
 
     const emailSubject = isHighPriority
-      ? "URGENT Electrical Request"
-      : "New Appointment Request";
+      ? "URGENT Electrical Request - Zap Tech Electrical"
+      : "New Appointment Request - Zap Tech Electrical";
 
     const emailBody = `
 New appointment request received.
@@ -106,7 +106,7 @@ ${additional_notes || "None"}
 
     // Send email
     await resend.emails.send({
-      from: "Appointment Requests <onboarding@resend.dev>",
+      from: "Zap Tech Electrical <onboarding@resend.dev>",
       to: process.env.OFFICE_EMAIL,
       subject: emailSubject,
       text: emailBody
@@ -114,18 +114,24 @@ ${additional_notes || "None"}
 
     console.log("Email sent successfully");
 
-    // Send text message
-    await twilioClient.messages.create({
-      body: smsBody,
-      from: process.env.TWILIO_PHONE_NUMBER,
-      to: process.env.OFFICE_PHONE_NUMBER
-    });
+    // Send text message only if high priority
+    if (isHighPriority) {
+      await twilioClient.messages.create({
+        body: smsBody,
+        from: process.env.TWILIO_PHONE_NUMBER,
+        to: process.env.OFFICE_PHONE_NUMBER
+      });
 
-    console.log("Text message sent successfully");
+      console.log("High priority text message sent successfully");
+    } else {
+      console.log("Normal priority request - SMS not sent");
+    }
 
     res.json({
       success: true,
-      message: "Appointment email and text sent successfully"
+      message: isHighPriority
+        ? "High priority appointment email and text sent successfully"
+        : "Appointment email sent successfully"
     });
   } catch (error) {
     console.error("Function error:", error);
