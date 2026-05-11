@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const { Resend } = require("resend");
-const twilio = require("twilio");
+const Telnyx = require("telnyx");
 
 const app = express();
 
@@ -9,11 +9,7 @@ app.use(cors());
 app.use(express.json());
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-
-const twilioClient = twilio(
-  process.env.TWILIO_ACCOUNT_SID,
-  process.env.TWILIO_AUTH_TOKEN
-);
+const telnyx = Telnyx(process.env.TELNYX_API_KEY);
 
 app.get("/", (req, res) => {
   res.send("Server is running");
@@ -50,10 +46,41 @@ app.post("/send-appointment", async (req, res) => {
       additional_notes = ""
     } = data;
 
+    const emergencyText = `
+${priority}
+${urgent_safety_concern}
+${immediate_danger}
+${service_needed}
+${issue_summary}
+${additional_notes}
+`.toLowerCase();
+
+    const emergencyWords = [
+      "burning",
+      "burn",
+      "spark",
+      "sparking",
+      "smoke",
+      "fire",
+      "hot",
+      "turning black",
+      "black outlet",
+      "crackling",
+      "buzzing",
+      "exposed wire",
+      "exposed wires",
+      "melting",
+      "electrical smell",
+      "emergency",
+      "danger",
+      "urgent"
+    ];
+
     const isHighPriority =
       priority.toLowerCase() === "high" ||
       urgent_safety_concern.toLowerCase() === "yes" ||
-      immediate_danger.toLowerCase() === "yes";
+      immediate_danger.toLowerCase() === "yes" ||
+      emergencyWords.some((word) => emergencyText.includes(word));
 
     const emailSubject = isHighPriority
       ? "URGENT Electrical Request - Zap Tech Electrical"
@@ -63,7 +90,7 @@ app.post("/send-appointment", async (req, res) => {
 New appointment request received.
 
 Call Type: ${call_type || "Not provided"}
-Priority: ${priority || "Normal"}
+Priority: ${isHighPriority ? "HIGH" : priority || "Normal"}
 
 Customer Information:
 Name: ${customer_name || "Not provided"}
@@ -100,9 +127,17 @@ Additional Notes:
 ${additional_notes || "None"}
 `;
 
-    const smsBody = isHighPriority
-      ? `URGENT ELECTRICAL REQUEST: ${customer_name || "Customer"} - ${phone_number || "No phone"} - ${service_needed || "Service needed"} - ${service_address || "No address"}`
-      : `New appointment: ${customer_name || "Customer"} - ${phone_number || "No phone"} - ${service_needed || "Service needed"} - ${preferred_date || "No date"} ${preferred_time_window || ""}`;
+    const smsBody = `URGENT ELECTRICAL REQUEST
+
+Name: ${customer_name || "Not provided"}
+Phone: ${phone_number || "Not provided"}
+Address: ${service_address || "Not provided"}
+Service Needed: ${service_needed || "Not provided"}
+Issue: ${issue_summary || "Not provided"}
+
+The customer was told a supervisor or technician will call shortly to confirm the message was received and go over next steps.
+
+Please call the customer ASAP.`;
 
     // Send email
     await resend.emails.send({
@@ -114,15 +149,15 @@ ${additional_notes || "None"}
 
     console.log("Email sent successfully");
 
-    // Send text message only if high priority
+    // Send Telnyx text message only if high priority
     if (isHighPriority) {
-      await twilioClient.messages.create({
-        body: smsBody,
-        from: process.env.TWILIO_PHONE_NUMBER,
-        to: process.env.OFFICE_PHONE_NUMBER
+      await telnyx.messages.create({
+        from: process.env.TELNYX_FROM_NUMBER,
+        to: process.env.OFFICE_PHONE_NUMBER,
+        text: smsBody
       });
 
-      console.log("High priority text message sent successfully");
+      console.log("High priority Telnyx text message sent successfully");
     } else {
       console.log("Normal priority request - SMS not sent");
     }
@@ -130,7 +165,7 @@ ${additional_notes || "None"}
     res.json({
       success: true,
       message: isHighPriority
-        ? "High priority appointment email and text sent successfully"
+        ? "High priority appointment email and Telnyx text sent successfully"
         : "Appointment email sent successfully"
     });
   } catch (error) {
@@ -138,7 +173,7 @@ ${additional_notes || "None"}
 
     res.status(500).json({
       success: false,
-      message: "Failed to send appointment email or text",
+      message: "Failed to send appointment email or Telnyx text",
       error: error.message
     });
   }
