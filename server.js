@@ -15,6 +15,54 @@ app.get("/", (req, res) => {
   res.send("Server is running");
 });
 
+async function sendTeamsAlert(data, isHighPriority) {
+  if (!process.env.TEAMS_WEBHOOK_URL) {
+    console.log("No TEAMS_WEBHOOK_URL set - Teams alert skipped");
+    return;
+  }
+
+  const teamsMessage = {
+    title: isHighPriority
+      ? "🚨 URGENT Electrical Service Call"
+      : "New Service Request",
+
+    customer_name: data.customer_name || "Not provided",
+    phone_number: data.phone_number || "Not provided",
+    email: data.email || "Not provided",
+
+    service_address: data.service_address || "Not provided",
+    property_type: data.property_type || "Not provided",
+    service_needed: data.service_needed || "Not provided",
+    issue_summary: data.issue_summary || "Not provided",
+
+    preferred_date: data.preferred_date || "Not provided",
+    preferred_time_window: data.preferred_time_window || "Not provided",
+    confirmation_method: data.confirmation_method || "Not provided",
+
+    call_type: data.call_type || "Not provided",
+    priority: "HIGH",
+
+    urgent_safety_concern: data.urgent_safety_concern || "Unknown",
+    immediate_danger: data.immediate_danger || "Unknown",
+    additional_notes: data.additional_notes || "None"
+  };
+
+  const response = await fetch(process.env.TEAMS_WEBHOOK_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(teamsMessage)
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("Teams webhook failed:", response.status, errorText);
+  } else {
+    console.log("Emergency Teams alert sent successfully");
+  }
+}
+
 app.post("/send-appointment", async (req, res) => {
   console.log("DATA RECEIVED:", JSON.stringify(req.body, null, 2));
 
@@ -139,7 +187,7 @@ The customer was told a supervisor or technician will call shortly to confirm th
 
 Please call the customer ASAP.`;
 
-    // Send email
+    // Send email for every request
     await resend.emails.send({
       from: "Zap Tech Electrical <onboarding@resend.dev>",
       to: process.env.OFFICE_EMAIL,
@@ -148,6 +196,13 @@ Please call the customer ASAP.`;
     });
 
     console.log("Email sent successfully");
+
+    // Send Microsoft Teams alert only for emergency/high-priority calls
+    if (isHighPriority) {
+      await sendTeamsAlert(data, isHighPriority);
+    } else {
+      console.log("Normal priority request - Teams alert not sent");
+    }
 
     // Send Telnyx text message only if high priority
     if (isHighPriority) {
@@ -165,15 +220,15 @@ Please call the customer ASAP.`;
     res.json({
       success: true,
       message: isHighPriority
-        ? "High priority appointment email and Telnyx text sent successfully"
-        : "Appointment email sent successfully"
+        ? "High priority appointment email, Teams alert, and Telnyx text sent successfully"
+        : "Normal appointment email sent successfully"
     });
   } catch (error) {
     console.error("Function error:", error);
 
     res.status(500).json({
       success: false,
-      message: "Failed to send appointment email or Telnyx text",
+      message: "Failed to send appointment email, Teams alert, or Telnyx text",
       error: error.message
     });
   }
