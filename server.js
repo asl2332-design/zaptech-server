@@ -1,7 +1,8 @@
 const express = require("express");
 const cors = require("cors");
 const { Resend } = require("resend");
-const Telnyx = require("telnyx");
+// Telnyx temporarily disabled while using Microsoft Teams
+// const Telnyx = require("telnyx");
 
 const app = express();
 
@@ -9,7 +10,7 @@ app.use(cors());
 app.use(express.json());
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-const telnyx = Telnyx(process.env.TELNYX_API_KEY);
+// const telnyx = Telnyx(process.env.TELNYX_API_KEY);
 
 app.get("/", (req, res) => {
   res.send("Server is running");
@@ -175,18 +176,6 @@ Additional Notes:
 ${additional_notes || "None"}
 `;
 
-    const smsBody = `URGENT ELECTRICAL REQUEST
-
-Name: ${customer_name || "Not provided"}
-Phone: ${phone_number || "Not provided"}
-Address: ${service_address || "Not provided"}
-Service Needed: ${service_needed || "Not provided"}
-Issue: ${issue_summary || "Not provided"}
-
-The customer was told a supervisor or technician will call shortly to confirm the message was received and go over next steps.
-
-Please call the customer ASAP.`;
-
     // Send email for every request
     await resend.emails.send({
       from: "Zap Tech Electrical <onboarding@resend.dev>",
@@ -204,15 +193,9 @@ Please call the customer ASAP.`;
       console.log("Normal priority request - Teams alert not sent");
     }
 
-    // Send Telnyx text message only if high priority
+    // Telnyx SMS temporarily disabled while using Teams
     if (isHighPriority) {
-      await telnyx.messages.create({
-        from: process.env.TELNYX_FROM_NUMBER,
-        to: process.env.OFFICE_PHONE_NUMBER,
-        text: smsBody
-      });
-
-      console.log("High priority Telnyx text message sent successfully");
+      console.log("Telnyx SMS temporarily disabled - using Teams for emergency alerts");
     } else {
       console.log("Normal priority request - SMS not sent");
     }
@@ -220,7 +203,7 @@ Please call the customer ASAP.`;
     res.json({
       success: true,
       message: isHighPriority
-        ? "High priority appointment email, Teams alert, and Telnyx text sent successfully"
+        ? "High priority appointment email and Teams alert sent successfully"
         : "Normal appointment email sent successfully"
     });
   } catch (error) {
@@ -228,7 +211,7 @@ Please call the customer ASAP.`;
 
     res.status(500).json({
       success: false,
-      message: "Failed to send appointment email, Teams alert, or Telnyx text",
+      message: "Failed to send appointment email or Teams alert",
       error: error.message
     });
   }
